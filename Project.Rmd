@@ -93,7 +93,7 @@ cbind(
 )
 ```
 
-**I expect out-of-sample accuracy to be higher than in-sample accuracy, but the accuracy ranking among different models should be similar: rf>=bag>=gbm >> svm>nb>lda>rpart**\
+**I expect out-of-sample error (1-accuracy) to be a little bit higher but very close to in-sample error; eg. for nb_mod, the out-of-sample error should be close to 0.25; but the accuracy ranking among different models should be similar: rf>=bag>=gbm >> svm>nb>lda>rpart**\
 
 ###### Evaluate out-of-sample accuracy of each Single model
 ```{r,warning=FALSE, message=FALSE}
