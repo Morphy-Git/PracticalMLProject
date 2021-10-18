@@ -1,0 +1,142 @@
+---
+title: "Practical ML_Peer-graded Assignment"
+author: "Qianqian Hu"
+date: "10/17/2021"
+output: 
+  html_document:
+    toc_depth: '3'
+    df_print: paged
+  pdf_document:
+    df_print: paged
+    toc_depth: 3
+---
+
+### Executive Summary
+##### Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##### Data
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+##### What you should submit
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+##### Peer Review Portion
+Your submission for the Peer Review portion should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-).
+
+##### Course Project Prediction Quiz Portion
+Apply your machine learning algorithm to the 20 test cases available in the test data above and submit your predictions in appropriate format to the Course Project Prediction Quiz for automated grading. 
+
+##### Reproducibility
+Due to security concerns with the exchange of R code, your code will not be run during the evaluation by your classmates. Please be sure that if they download the repo, they will be able to view the compiled HTML version of your analysis. 
+
+```{r load library, warning=FALSE, message=FALSE}
+library(dplyr); library(caret); library(utils); library(ggplot2); library(klaR); library(mgcv); library(nlme); library(randomForest)
+```
+
+### Read, Clean, Divide Data
+**Download and read in data for training and testing data set**
+```{r read data, warning=FALSE, message=FALSE}
+url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"; download.file(url,"./train.csv",method="curl")
+url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"; download.file(url,"./test.csv",method="curl")
+df=read.csv("./train.csv"); newdata=read.csv("./test.csv")
+```
+**Clean data**
+```{r, warning=FALSE, message=FALSE}
+df_clean=df[,-c(1:7)] # remove metadata
+df_clean=df_clean %>% select_if(colMeans(is.na(.))<0.9) # remove mostly NA columns
+df_clean <- df_clean[,-nearZeroVar(df_clean)] # remove near zero variance columns
+```
+** create training/testing/validation data set by 6:2:2 ratio**
+```{r, warning=FALSE, message=FALSE}
+inBuild=createDataPartition(df_clean$classe,p=0.8,list=FALSE); validation=df_clean[-inBuild,]
+Index=createDataPartition(df_clean[inBuild,]$classe,p=0.75,list=FALSE); training=df_clean[inBuild,][Index,]; testing=df_clean[inBuild,][-Index,]
+```
+
+### Train with single ML algorithms
+**- We should supervised ML algorithms, since the outcome classes is known.**\
+**- We should use Classification Algorithms, since the outcome is the class.**\
+**- Cross-validation should be used to avoid over fitting**\
+**- Since the predictors are assumed to be associated with each other, so PCA preProcession is used**\
+**- By check the model list with "train_model_list", I chose several popular models that have met the above requirements, and have been covered in this course.**\
+**- Generalized Linear Model is not tries since its the outcome has more than 2 classes**\
+**- Shrinkage/Regularization algorithm wasn't tested because the sample size -- `r dim(training)[1]` is way bigger than variable size -- `r dim(training)[2]`, so overfitting is not quite a concern**\
+```{r Single Models, warning=FALSE, message=FALSE, results='hide'}
+## A bagging method "treebag"
+bag_mod <- train(classe ~.,method="treebag", data=training, trControl = trainControl(method="cv",number=3))
+## Recursive Partitioning and Regression Trees "rpart"
+rpart_mod <- train(classe ~.,method="rpart", data=training, trControl = trainControl(method="cv",number=3))
+## Linear Discriminant Analysis "lda"
+lda_mod <- train(classe ~.,method="lda",data=training, trControl = trainControl(method="cv",number=3))
+## Naive Bayes "nb"
+nb_mod <- train(classe ~.,method="nb",data=training, trControl = trainControl(method="cv",number=3))
+## Random Forest "rf"
+rf_mod <- train(classe ~.,method="rf", data=training, trControl = trainControl(method="cv",number=3))
+## Generalized Boosted Models -- "gbm"
+gbm_mod <- train(classe ~.,method="gbm",data=training, trControl = trainControl(method="cv",number=3))
+## Support Vector Machines with Linear Kernel "svmLinear"
+svm_mod <- train(classe ~.,method="svmLinear",data=training, trControl = trainControl(method="cv",number=3))
+```
+
+###### Evaluate in-sample accuracy of each Single model
+```{r, warning=FALSE, message=FALSE}
+cbind(
+  bag=sum(predict(bag_mod,training[,-53])==training$classe)/dim(training)[1],
+  rpart=sum(predict(rpart_mod,training[,-53])==training$classe)/dim(training)[1],
+  lda=sum(predict(lda_mod,training[,-53])==training$classe)/dim(training)[1],
+  nb=sum(predict(nb_mod,training[,-53])==training$classe)/dim(training)[1],
+  rf=sum(predict(rf_mod,training[,-53])==training$classe)/dim(training)[1],
+  gbm=sum(predict(gbm_mod,training[,-53])==training$classe)/dim(training)[1],
+  svm=sum(predict(svm_mod,training[,-53])==training$classe)/dim(training)[1]
+)
+```
+
+**I expect out-of-sample accuracy to be higher than in-sample accuracy, but the accuracy ranking among different models should be similar: rf>=bag>=gbm >> svm>nb>lda>rpart**\
+
+###### Evaluate out-of-sample accuracy of each Single model
+```{r,warning=FALSE, message=FALSE}
+cbind(
+  bag=sum(predict(bag_mod,testing[,-53])==testing$classe)/dim(testing)[1],
+  rpart=sum(predict(rpart_mod,testing[,-53])==testing$classe)/dim(testing)[1],
+  lda=sum(predict(lda_mod,testing[,-53])==testing$classe)/dim(testing)[1],
+  nb=sum(predict(nb_mod,testing[,-53])==testing$classe)/dim(testing)[1],
+  rf=sum(predict(rf_mod,testing[,-53])==testing$classe)/dim(testing)[1],
+  gbm=sum(predict(gbm_mod,testing[,-53])==testing$classe)/dim(testing)[1],
+  svm=sum(predict(svm_mod,testing[,-53])==testing$classe)/dim(testing)[1]
+)
+```
+
+**Accuracy ranking: rf ≳ treebag ≳ gbm > svm > nb > lda > rpart**\
+**Therefore, rf, treebag and gbm are selected to construct ensembling model."**\
+
+### Evaluate Stack Model
+```{r, warning=FALSE, message=FALSE}
+## Construct combTest using predictiong results of testing data
+combTest=data.frame(rf=predict(rf_mod,testing[,-53]), bag=predict(bag_mod,testing[,-53]), gbm=predict(gbm_mod,testing[,-53]),classe=testing$classe)
+## run a rf model on the combined test data
+stack_mod=train(classe~.,combTest,method="rf")
+## Construct combVal using prediction results of validation data
+combVal=data.frame(rf=predict(rf_mod,validation[,-53]), bag=predict(bag_mod,validation[,-53]), gbm=predict(gbm_mod,validation[,-53]),classe=validation$classe)
+## Evaluate the out-of-sample accuracy of Single models vs stack model
+rbind(
+  test = c(rf = sum(predict(rf_mod,testing)==testing$classe)/dim(testing)[1], 
+bag = sum(predict(bag_mod,testing)==testing$classe)/dim(testing)[1], gbm = sum(predict(gbm_mod,testing)==testing$classe)/dim(testing)[1], 
+stack = sum(predict(stack_mod,combTest)==combTest$classe)/dim(combTest)[1]),
+  validation = c(sum(predict(rf_mod,validation)==validation$classe)/dim(validation)[1], sum(predict(bag_mod,validation)==validation$classe)/dim(validation)[1], sum(predict(gbm_mod,validation)==validation$classe)/dim(validation)[1],
+sum(predict(stack_mod,combVal)==combVal$classe)/dim(combVal)[1])
+)
+```
+
+**All models have high prediction accuracy, stack is always the best."
+
+### Plotting models
+```{r, warning=FALSE, message=FALSE}
+## rpart_mod tree
+rattle::fancyRpartPlot(rpart_mod$finalModel)
+## construct diagnostic plots for models
+plot(rf_mod)
+plot(gbm_mod)
+plot(stack_mod)
+```
